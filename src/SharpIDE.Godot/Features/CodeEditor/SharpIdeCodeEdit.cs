@@ -47,6 +47,7 @@ public partial class SharpIdeCodeEdit : CodeEdit
 	private ImmutableArray<CodeAction> _currentCodeActionsInPopup = [];
 	private bool _fileChangingSuppressBreakpointToggleEvent;
 	private bool _settingWholeDocumentTextSuppressLineEditsEvent; // A dodgy workaround - setting the whole document doesn't guarantee that the line count stayed the same etc. We are still going to have broken highlighting. TODO: Investigate getting minimal text change ranges, and change those ranges only
+	private bool _needsInitialHighlight = true;
 	private bool _fileDeleted;
 	private IDisposable? _projectDiagnosticsObserveDisposable;
 	
@@ -312,6 +313,7 @@ public partial class SharpIdeCodeEdit : CodeEdit
 	{
 		await Task.CompletedTask.ConfigureAwait(ConfigureAwaitOptions.ForceYielding); // get off the UI thread
 		using var __ = SharpIdeOtel.Source.StartActivity($"{nameof(SharpIdeCodeEdit)}.{nameof(SetSharpIdeFile)}");
+		_needsInitialHighlight = true;
 		_currentFile = file;
 		var readFileTask = _openTabsFileManager.GetFileTextAsync(file);
 		_currentFile.FileContentsChangedExternally.Subscribe(OnFileChangedExternally);
@@ -548,9 +550,12 @@ public partial class SharpIdeCodeEdit : CodeEdit
 	{
 		_syntaxHighlighter.SetHighlightingData(classifiedSpans, razorClassifiedSpans);
 		//_syntaxHighlighter.ClearHighlightingCache();
-		_syntaxHighlighter.UpdateCache(); // I don't think this does anything, it will call _UpdateCache which we have not implemented
-		SyntaxHighlighter = null;
-		SyntaxHighlighter = _syntaxHighlighter; // Reassign to trigger redraw
+		if (_needsInitialHighlight)
+		{
+			SyntaxHighlighter = null;
+			SyntaxHighlighter = _syntaxHighlighter;
+			_needsInitialHighlight = false;
+		}
 	}
 
 	private void OnCodeFixesRequested()
